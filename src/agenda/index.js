@@ -12,7 +12,7 @@ import {VelocityTracker} from '../input';
 
 
 const HEADER_HEIGHT = 104;
-const KNOB_HEIGHT = 24;
+const KNOB_HEIGHT = 34;
 //Fallback when RN version is < 0.44
 const viewPropTypes = ViewPropTypes || View.propTypes;
 
@@ -156,9 +156,15 @@ export default class AgendaView extends Component {
       this.knob.setNativeProps({style: {opacity: 1}});
     }
 
-    if (this.headerState === 'touched') {
+    if (this.headerState === 'touched' && this.state.calendarScrollable === false) {
       this.setScrollPadPosition(0, true);
       this.enableCalendarScrolling();
+    } else if (this.headerState == 'touched' && this.state.calendarScrollable === true) {
+      this.setScrollPadPosition(this.initialScrollPadPosition(), true);
+      this.setState({
+        calendarScrollable: false
+      })
+      this.calendar.scrollToDay(this.state.selectedDay, this.calendarOffset() + 1, true);
     }
 
     this.headerState = 'idle';
@@ -181,6 +187,11 @@ export default class AgendaView extends Component {
     
     if (snapY === 0) {
       this.enableCalendarScrolling();
+    } else {
+      this.setState({
+        calendarScrollable: false
+      })
+      this.calendar.scrollToDay(this.state.selectedDay, this.calendarOffset() + 1, true);
     }
   }
 
@@ -216,15 +227,23 @@ export default class AgendaView extends Component {
     this._isMounted = false;
   }
 
-  componentWillReceiveProps(props) {
-    if (props.items) {
-      this.setState({
-        firstResevationLoad: false
-      });
-    } else {
-      this.loadReservations(props);
-    }
-  }
+	componentWillReceiveProps(nextProps) {
+		const nextState = {};
+		if (nextProps.items) {
+			nextState.firstResevationLoad = false;
+		}
+		if (
+			nextProps.selected &&
+			!dateutils.sameDate(nextProps.selected, this.props.selected)
+		) {
+			nextState.selectedDay = parseDate(nextProps.selected);
+		}
+		if (Object.keys(nextState).length) {
+			this.setState(nextState);
+		} else {
+			this.loadReservations(nextProps);
+		}
+	}
 
   enableCalendarScrolling() {
     this.setState({
@@ -269,7 +288,6 @@ export default class AgendaView extends Component {
 
     this.setScrollPadPosition(this.initialScrollPadPosition(), true);
     this.calendar.scrollToDay(day, this.calendarOffset(), true);
-    
     if (this.props.loadItemsForMonth) {
       this.props.loadItemsForMonth(xdateToData(day));
     }
@@ -372,10 +390,10 @@ export default class AgendaView extends Component {
       weekdaysStyle.push({height: HEADER_HEIGHT});
     }
 
-    const shouldAllowDragging = !this.props.hideKnob && !this.state.calendarScrollable;
+    const shouldAllowDragging = true; // !this.props.hideKnob && !this.state.calendarScrollable;
     const scrollPadPosition = (shouldAllowDragging ? HEADER_HEIGHT  : 0) - KNOB_HEIGHT;
 
-    const scrollPadStyle = {
+    var scrollPadStyle = {
       position: 'absolute',
       width: 80,
       height: KNOB_HEIGHT,
@@ -383,11 +401,22 @@ export default class AgendaView extends Component {
       left: (this.viewWidth - 80) / 2
     };
 
+    if (this.state.calendarScrollable) {
+      scrollPadStyle = {
+        position: 'absolute',
+        width: 80,
+        height: KNOB_HEIGHT,
+        bottom: 0,
+        left: (this.viewWidth - 80) / 2
+      };
+    }
+    
     let knob = (<View style={this.styles.knobContainer}/>);
 
     if (!this.props.hideKnob) {
       const knobView = this.props.renderKnob ? this.props.renderKnob() : (<View style={this.styles.knob}/>);
-      knob = this.state.calendarScrollable ? null : (
+      knob = //this.state.calendarScrollable ? null : 
+      (
         <View style={this.styles.knobContainer}>
           <View ref={(c) => this.knob = c}>{knobView}</View>
         </View>
@@ -432,6 +461,16 @@ export default class AgendaView extends Component {
         </Animated.View>
         <Animated.View style={weekdaysStyle}>
           {this.props.showWeekNumbers && <Text allowFontScaling={false} style={this.styles.weekday} numberOfLines={1}></Text>}
+          <View style={{ width: 14, position: 'absolute', top: 30, left: -22 }}>
+            <Text style={{ fontSize: 12, color: '#535353', fontWeight: '500', textTransform: 'uppercase', transform: [{ rotate: '90deg' }], width: 40 }}>
+              { this.state.selectedDay.toUTCString().split(' ')[2] }
+            </Text>
+          </View>
+          <View style={{ width: 14, position: 'absolute', top: 30, right: 3 }}>
+            <Text style={{ fontSize: 12, color: '#535353', fontWeight: '500', transform: [{ rotate: '90deg' }], width: 40 }}>
+              { this.state.selectedDay.getFullYear() } 
+            </Text>
+          </View>
           {weekDaysNames.map((day, index) => (
             <Text allowFontScaling={false} key={day+index} style={this.styles.weekday} numberOfLines={1}>{day}</Text>
           ))}
@@ -441,8 +480,8 @@ export default class AgendaView extends Component {
           overScrollMode='never'
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
-          style={scrollPadStyle}
-          scrollEventThrottle={1}
+          style={ scrollPadStyle }
+          scrollEventThrottle={8}
           scrollsToTop={false}
           onTouchStart={this.onTouchStart}
           onTouchEnd={this.onTouchEnd}
